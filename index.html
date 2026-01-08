@@ -3,155 +3,114 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PWA Todo App</title>
+<title>PWA Todo</title>
 
-<!-- ===== MANIFEST (INLINE) ===== -->
 <link rel="manifest" href='data:application/json,{
   "name":"Todo PWA",
   "short_name":"Todo",
   "start_url":".",
   "display":"standalone",
-  "background_color":"#ffffff",
   "theme_color":"#0d6efd",
-  "icons":[
-    {
-      "src":"https://cdn-icons-png.flaticon.com/512/3176/3176363.png",
-      "sizes":"192x192",
-      "type":"image/png"
-    }
-  ]
+  "background_color":"#ffffff"
 }'>
 
 <style>
 body {
-  font-family: Arial, sans-serif;
-  background: #f2f4f8;
+  font-family: Arial;
+  background: #f1f3f6;
   display: flex;
   justify-content: center;
   align-items: center;
   height: 100vh;
 }
-
-.app {
+.box {
   background: #fff;
-  width: 320px;
   padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  width: 300px;
+  border-radius: 10px;
 }
-
-h2 {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-input {
+input, button {
   width: 100%;
   padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+  margin-top: 8px;
 }
-
-button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  background: #0d6efd;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin-top: 15px;
-}
-
 li {
-  background: #e9ecef;
-  padding: 8px;
-  margin-bottom: 8px;
-  border-radius: 6px;
+  background: #eee;
+  padding: 6px;
+  margin-top: 6px;
   display: flex;
   justify-content: space-between;
-}
-
-li span {
-  cursor: pointer;
-  color: red;
 }
 </style>
 </head>
 <body>
 
-<div class="app">
-  <h2>📝 Todo PWA</h2>
-  <input type="text" id="todoInput" placeholder="Add new task">
+<div class="box">
+  <h3>📝 Todo PWA</h3>
+  <input id="todo" placeholder="Enter task">
   <button onclick="addTodo()">Add</button>
-  <ul id="todoList"></ul>
+  <ul id="list"></ul>
 </div>
 
 <script>
-/* ===== TODO LOGIC ===== */
+/* ===== TODO LOGIC (OFFLINE SAFE) ===== */
 let todos = JSON.parse(localStorage.getItem("todos")) || [];
 
-function render() {
-  const list = document.getElementById("todoList");
+function draw() {
   list.innerHTML = "";
-  todos.forEach((todo, i) => {
-    list.innerHTML += `
-      <li>
-        ${todo}
-        <span onclick="removeTodo(${i})">❌</span>
-      </li>
-    `;
+  todos.forEach((t, i) => {
+    list.innerHTML += `<li>${t}<span onclick="del(${i})">❌</span></li>`;
   });
   localStorage.setItem("todos", JSON.stringify(todos));
 }
 
 function addTodo() {
-  const input = document.getElementById("todoInput");
-  if (input.value.trim()) {
-    todos.push(input.value);
-    input.value = "";
-    render();
-  }
+  let v = todo.value.trim();
+  if (!v) return;
+  todos.push(v);
+  todo.value = "";
+  draw();
 }
 
-function removeTodo(index) {
-  todos.splice(index, 1);
-  render();
+function del(i) {
+  todos.splice(i, 1);
+  draw();
 }
 
-render();
+draw();
 
-/* ===== SERVICE WORKER (INLINE) ===== */
+/* ===== SERVICE WORKER (PROPER OFFLINE CACHE) ===== */
 if ('serviceWorker' in navigator) {
-  const swCode = `
+
+  const sw = `
+    const CACHE = 'todo-v1';
+
     self.addEventListener('install', e => {
       e.waitUntil(
-        caches.open('todo-cache').then(cache => {
-          return cache.addAll(['./']);
-        })
+        caches.open(CACHE).then(c =>
+          c.put('/', new Response(
+            '<!DOCTYPE html>' + self.registration.scope
+          ))
+        )
       );
+      self.skipWaiting();
+    });
+
+    self.addEventListener('activate', e => {
+      self.clients.claim();
     });
 
     self.addEventListener('fetch', e => {
       e.respondWith(
-        caches.match(e.request).then(res => {
-          return res || fetch(e.request);
-        })
+        fetch(e.request).catch(() =>
+          caches.match(e.request).then(r => r || caches.match('/'))
+        )
       );
     });
   `;
 
-  const blob = new Blob([swCode], { type: 'text/javascript' });
-  const swURL = URL.createObjectURL(blob);
-
-  navigator.serviceWorker.register(swURL)
-    .then(() => console.log("PWA Service Worker Registered"));
+  const blob = new Blob([sw], { type: 'text/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob));
 }
 </script>
 
