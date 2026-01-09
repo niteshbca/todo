@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Simple Sync Input</title>
+<title>Offline Safe Input</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -26,26 +26,25 @@ input{
   font-size:16px;
 }
 p{
-  color:green;
   margin-top:10px;
 }
+.offline{color:red;}
+.online{color:green;}
 </style>
 </head>
 
 <body>
-
 <div class="box">
-  <h3>🔄 Live Input Sync</h3>
-  <input id="inputText" placeholder="Type here...">
-  <p id="status">Waiting...</p>
+  <h3>🔄 Smart Sync Input</h3>
+  <input id="inputText" placeholder="Type freely...">
+  <p id="status" class="online">Online</p>
 </div>
 
-<!-- Firebase CDN (IMPORTANT) -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-/* ✅ YOUR FIREBASE CONFIG */
+/* Firebase config */
 const firebaseConfig = {
   apiKey: "AIzaSyCgLtg0zJCCx6OHUKII3yN4GCYIHjGJsKk",
   authDomain: "to-do-56239.firebaseapp.com",
@@ -60,20 +59,47 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const dataRef = ref(db, "shared/input");
 
-/* INPUT → FIREBASE */
-inputText.addEventListener("input", () => {
-  set(dataRef, inputText.value);
-});
+/* ===== LOCAL STORAGE (OFFLINE FIRST) ===== */
+let localValue = localStorage.getItem("localInput") || "";
+inputText.value = localValue;
 
-/* FIREBASE → INPUT (REALTIME) */
-onValue(dataRef, (snapshot) => {
-  if(snapshot.exists()){
-    inputText.value = snapshot.val();
-    status.innerText = "Synced ✔";
+/* INPUT EVENT (NEVER BLOCKS) */
+inputText.addEventListener("input", () => {
+  localValue = inputText.value;
+  localStorage.setItem("localInput", localValue);
+
+  // Sirf online hone par Firebase bhejo
+  if (navigator.onLine) {
+    set(dataRef, localValue);
   }
 });
+
+/* FIREBASE → INPUT (ONLINE SYNC) */
+onValue(dataRef, snap => {
+  if (!navigator.onLine) return; // offline me overwrite nahi
+  if (snap.exists()) {
+    inputText.value = snap.val();
+    localStorage.setItem("localInput", snap.val());
+  }
+});
+
+/* ONLINE / OFFLINE STATUS */
+function updateStatus(){
+  if(navigator.onLine){
+    status.innerText = "Online ✔";
+    status.className = "online";
+    // internet aate hi local → firebase
+    set(dataRef, localValue);
+  }else{
+    status.innerText = "Offline (Local mode)";
+    status.className = "offline";
+  }
+}
+
+window.addEventListener("online", updateStatus);
+window.addEventListener("offline", updateStatus);
+updateStatus();
 </script>
 
 </body>
 </html>
-
