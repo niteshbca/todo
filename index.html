@@ -1,158 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PWA Todo App</title>
-
-<!-- ===== MANIFEST (INLINE) ===== -->
-<link rel="manifest" href='data:application/json,{
-  "name":"Todo PWA",
-  "short_name":"Todo",
-  "start_url":".",
-  "display":"standalone",
-  "background_color":"#ffffff",
-  "theme_color":"#0d6efd",
-  "icons":[
-    {
-      "src":"https://cdn-icons-png.flaticon.com/512/3176/3176363.png",
-      "sizes":"192x192",
-      "type":"image/png"
-    }
-  ]
-}'>
+<title>Simple Sync Input</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #f2f4f8;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+body{
+  font-family: Arial;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+  background:#f2f2f2;
 }
-
-.app {
-  background: #fff;
-  width: 320px;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+.box{
+  background:#fff;
+  padding:20px;
+  border-radius:10px;
+  width:280px;
 }
-
-h2 {
-  text-align: center;
-  margin-bottom: 15px;
+input{
+  width:100%;
+  padding:10px;
+  font-size:16px;
 }
-
-input {
-  width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-}
-
-button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  background: #0d6efd;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin-top: 15px;
-}
-
-li {
-  background: #e9ecef;
-  padding: 8px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  display: flex;
-  justify-content: space-between;
-}
-
-li span {
-  cursor: pointer;
-  color: red;
+p{
+  margin-top:10px;
+  color:green;
 }
 </style>
 </head>
-<body>
 
-<div class="app">
-  <h2>📝 Todo PWA</h2>
-  <input type="text" id="todoInput" placeholder="Add new task">
-  <button onclick="addTodo()">Add</button>
-  <ul id="todoList"></ul>
+<body>
+<div class="box">
+  <h3>🔄 Live Sync Input</h3>
+  <input id="textInput" placeholder="Type something...">
+  <p id="status">Waiting...</p>
 </div>
 
-<script>
-/* ===== TODO LOGIC ===== */
-let todos = JSON.parse(localStorage.getItem("todos")) || [];
+<!-- Firebase -->
+<script type="module">
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
-function render() {
-  const list = document.getElementById("todoList");
-  list.innerHTML = "";
-  todos.forEach((todo, i) => {
-    list.innerHTML += `
-      <li>
-        ${todo}
-        <span onclick="removeTodo(${i})">❌</span>
-      </li>
-    `;
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCgLtg0zJCCx6OHUKII3yN4GCYIHjGJsKk",
+  authDomain: "to-do-56239.firebaseapp.com",
+  projectId: "to-do-56239",
+  storageBucket: "to-do-56239.firebasestorage.app",
+  messagingSenderId: "434619242688",
+  appId: "1:434619242688:web:43c2151a4ef39a7052f525",
+  measurementId: "G-8NT265JK7T"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+const dataRef = ref(analytics, "sharedInput");
+
+/* INPUT → FIREBASE */
+textInput.addEventListener("input", () => {
+  set(dataRef, {
+    value: textInput.value,
+    time: Date.now()
   });
-  localStorage.setItem("todos", JSON.stringify(todos));
-}
+});
 
-function addTodo() {
-  const input = document.getElementById("todoInput");
-  if (input.value.trim()) {
-    todos.push(input.value);
-    input.value = "";
-    render();
+/* FIREBASE → INPUT (REALTIME SYNC) */
+onValue(dataRef, (snapshot) => {
+  const data = snapshot.val();
+  if(data){
+    textInput.value = data.value;
+    status.innerText = "Synced ✔";
   }
-}
-
-function removeTodo(index) {
-  todos.splice(index, 1);
-  render();
-}
-
-render();
-
-/* ===== SERVICE WORKER (INLINE) ===== */
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    self.addEventListener('install', e => {
-      e.waitUntil(
-        caches.open('todo-cache').then(cache => {
-          return cache.addAll(['./']);
-        })
-      );
-    });
-
-    self.addEventListener('fetch', e => {
-      e.respondWith(
-        caches.match(e.request).then(res => {
-          return res || fetch(e.request);
-        })
-      );
-    });
-  `;
-
-  const blob = new Blob([swCode], { type: 'text/javascript' });
-  const swURL = URL.createObjectURL(blob);
-
-  navigator.serviceWorker.register(swURL)
-    .then(() => console.log("PWA Service Worker Registered"));
-}
+});
 </script>
 
 </body>
