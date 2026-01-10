@@ -1,104 +1,96 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Offline Safe Input</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<style>
-body{
-  font-family: Arial;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:100vh;
-  background:#f2f2f2;
-}
-.box{
-  background:#fff;
-  padding:20px;
-  border-radius:10px;
-  width:280px;
-}
-input{
-  width:100%;
-  padding:10px;
-  font-size:16px;
-}
-p{
-  margin-top:10px;
-}
-.offline{color:red;}
-.online{color:green;}
-</style>
+  <title>Inventory PWA</title>
+  <style>
+    body { font-family: Arial; padding: 20px }
+    button { margin: 3px }
+  </style>
 </head>
-
 <body>
-<div class="box">
-  <h3>🔄 Smart Sync Input</h3>
-  <input id="inputText" placeholder="Type freely...">
-  <p id="status" class="online">Online</p>
-</div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<h2>📦 Inventory</h2>
+<div id="items"></div>
 
-/* Firebase config */
-const firebaseConfig = {
-  apiKey: "AIzaSyCgLtg0zJCCx6OHUKII3yN4GCYIHjGJsKk",
-  authDomain: "to-do-56239.firebaseapp.com",
-  databaseURL: "https://to-do-56239-default-rtdb.firebaseio.com",
-  projectId: "to-do-56239",
-  storageBucket: "to-do-56239.appspot.com",
-  messagingSenderId: "434619242688",
-  appId: "1:434619242688:web:43c2151a4ef39a7052f525"
-};
+<script>
+const API = "http://localhost:3000";
+let data = JSON.parse(localStorage.getItem("items")) || {};
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const dataRef = ref(db, "shared/input");
+function save() {
+  localStorage.setItem("items", JSON.stringify(data));
+}
 
-/* ===== LOCAL STORAGE (OFFLINE FIRST) ===== */
-let localValue = localStorage.getItem("localInput") || "";
-inputText.value = localValue;
+function render() {
+  const box = document.getElementById("items");
+  box.innerHTML = "";
 
-/* INPUT EVENT (NEVER BLOCKS) */
-inputText.addEventListener("input", () => {
-  localValue = inputText.value;
-  localStorage.setItem("localInput", localValue);
-
-  // Sirf online hone par Firebase bhejo
-  if (navigator.onLine) {
-    set(dataRef, localValue);
-  }
-});
-
-/* FIREBASE → INPUT (ONLINE SYNC) */
-onValue(dataRef, snap => {
-  if (!navigator.onLine) return; // offline me overwrite nahi
-  if (snap.exists()) {
-    inputText.value = snap.val();
-    localStorage.setItem("localInput", snap.val());
-  }
-});
-
-/* ONLINE / OFFLINE STATUS */
-function updateStatus(){
-  if(navigator.onLine){
-    status.innerText = "Online ✔";
-    status.className = "online";
-    // internet aate hi local → firebase
-    set(dataRef, localValue);
-  }else{
-    status.innerText = "Offline (Local mode)";
-    status.className = "offline";
+  for (let name in data) {
+    box.innerHTML += `
+      <div>
+        <b>${name}</b>: ${data[name].count}
+        <button onclick="add('${name}')">+</button>
+        <button onclick="sub('${name}')">-</button>
+      </div>`;
   }
 }
 
-window.addEventListener("online", updateStatus);
-window.addEventListener("offline", updateStatus);
-updateStatus();
+function add(name) {
+  data[name] ??= { count: 0, pending: 0 };
+  data[name].count++;
+  data[name].pending++;
+  save(); render();
+  if (navigator.onLine) sync(name);
+}
+
+function sub(name) {
+  if (!data[name] || data[name].count === 0) return;
+  data[name].count--;
+  data[name].pending--;
+  save(); render();
+  if (navigator.onLine) sync(name);
+}
+
+async function sync(name) {
+  if (data[name].pending === 0) return;
+
+  const res = await fetch(API + "/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, delta: data[name].pending })
+  });
+
+  const server = await res.json();
+  data[name].count = server.count;
+  data[name].pending = 0;
+  save(); render();
+}
+
+async function loadServer() {
+  if (!navigator.onLine) return;
+
+  const res = await fetch(API + "/items");
+  const items = await res.json();
+
+  items.forEach(i => {
+    data[i.name] ??= { count: 0, pending: 0 };
+    if (data[i.name].pending === 0)
+      data[i.name].count = i.count;
+  });
+
+  save(); render();
+}
+
+window.addEventListener("online", loadServer);
+
+["apple","mango","banana"].forEach(n =>
+  data[n] ??= { count: 0, pending: 0 }
+);
+
+loadServer();
+render();
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
 </script>
 
 </body>
